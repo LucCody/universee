@@ -166,21 +166,37 @@ jobs:
           ndk-version: "r28c"
           add-to-path: true
 
-      - name: Setup vcpkg
+      - name: Set NDK Environment Variables
+        run: |
+          echo "ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
+          echo "NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
+          echo "ANDROID_NDK_LATEST_HOME=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: "1.75"
+          targets: ${{ matrix.job.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: rust-cache-android-${{ matrix.job.arch }}
+
+      - name: Install cargo ndk
+        run: cargo install cargo-ndk --version 3.1.2 --locked
+
+      - name: Install vcpkg
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgDirectory: /opt/artifacts/vcpkg
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          vcpkgDirectory: ${{ runner.workspace }}/vcpkg
           doNotCache: false
 
-      - name: Install vcpkg dependencies
-        env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
-          VCPKG_ROOT: /opt/artifacts/vcpkg
-        shell: bash
+      - name: Build librustdesk for Android
         run: |
-          ./flutter/build_android_deps.sh "${{ matrix.job.arch }}"
+          export ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}
+          export ANDROID_NDK_ROOT=${{ steps.setup-ndk.outputs.ndk-path }}
+          ${{ matrix.job.ndk_script }}
 
       - name: Restore bridge files
         uses: actions/download-artifact@v4
@@ -188,30 +204,12 @@ jobs:
           name: bridge-artifact
           path: ./
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@v1
-        with:
-          toolchain: "1.75"
-          components: "rustfmt"
-
-      - name: Build UniverSee Native Library
-        env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+      - name: Build Flutter APK
         run: |
-          rustup target add ${{ matrix.job.target }}
-          cargo install cargo-ndk --version 3.1.2 --locked
-          ${{ matrix.job.ndk_script }}
+          export ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}
+          export ANDROID_NDK_ROOT=${{ steps.setup-ndk.outputs.ndk-path }}
           mkdir -p ./flutter/android/app/src/main/jniLibs/${{ matrix.job.arch }}
-          cp ./target/${{ matrix.job.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/${{ matrix.job.arch }}/librustdesk.so
-          cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/${{ matrix.job.ndk_lib_dir }}/libc++_shared.so ./flutter/android/app/src/main/jniLibs/${{ matrix.job.arch }}/
-
-      - name: Build UniverSee Flutter APK
-        shell: bash
-        env:
-          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
-        run: |
-          export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
+          cp ./target/${{ matrix.job.target }}/release/libuniversalmove.so ./flutter/android/app/src/main/jniLibs/${{ matrix.job.arch }}/libuniversalmove.so 2>/dev/null || cp ./target/${{ matrix.job.target }}/release/librustdesk.so ./flutter/android/app/src/main/jniLibs/${{ matrix.job.arch }}/librustdesk.so
           sed -i "s/org.gradle.jvmargs=-Xmx1024M/org.gradle.jvmargs=-Xmx2g/g" ./flutter/android/gradle.properties
           sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
           pushd flutter
@@ -271,8 +269,14 @@ jobs:
           flutter doctor -v
           flutter precache --windows
           Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
-          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
-          Move-Item -Force -Path windows-x64-release/* -Destination C:\hostedtoolcache\windows\flutter\stable-${{ env.FLUTTER_VERSION }}-x64\bin\cache\artifacts\engine\windows-x64-release\
+          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release -Force
+          $flutterCmd = (Get-Command flutter).Source
+          $flutterBin = Split-Path -Parent $flutterCmd
+          $engineDir = Join-Path $flutterBin "cache\artifacts\engine\windows-x64-release"
+          if (!(Test-Path $engineDir)) {
+              New-Item -ItemType Directory -Force -Path $engineDir
+          }
+          Copy-Item -Force -Recurse -Path "windows-x64-release\*" -Destination $engineDir
 
       - name: Patch Flutter
         shell: bash
@@ -306,6 +310,9 @@ jobs:
         run: |
           $VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"
 
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
       - name: Build WindowInjection DLL
         shell: powershell
         run: |
@@ -321,6 +328,22 @@ jobs:
           python3 .\build.py --portable --flutter --skip-portable-pack --hwcodec --vram
           Move-Item -Path ./flutter/build/windows/x64/runner/Release -Destination ./rustdesk
           Copy-Item -Path ./RustDeskTempTopMostWindow/WindowInjection/x64/Release/WindowInjection.dll -Destination ./rustdesk/
+          
+          # Virtual display driver for headless remote control
+          Invoke-WebRequest -Uri https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
+          Expand-Archive usbmmidd_v2.zip -DestinationPath . -Force
+          Remove-Item -Path usbmmidd_v2\Win32 -Recurse -ErrorAction SilentlyContinue
+          Remove-Item -Path "usbmmidd_v2\deviceinstaller64.exe", "usbmmidd_v2\deviceinstaller.exe", "usbmmidd_v2\usbmmidd.bat" -ErrorAction SilentlyContinue
+          Move-Item -Force .\usbmmidd_v2 ./rustdesk/
+
+      - name: Copy Runner.res for metadata
+        shell: bash
+        run: |
+          runner_res=$(find . -name "Runner.res" | head -n 1)
+          if [ -n "$runner_res" ]; then
+            echo "Found Runner.res at $runner_res"
+            cp "$runner_res" ./libs/portable/Runner.res
+          fi
 
       - name: Package Self-Contained Portable EXE
         shell: bash
@@ -331,17 +354,22 @@ jobs:
           python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
           popd
           mkdir -p ./output
-          mv ./target/release/rustdesk-portable-packer.exe ./output/Universee-Windows.exe
+          PACKER_EXE=$(find target -name "rustdesk-portable-packer.exe" | head -n 1)
+          if [ -z "$PACKER_EXE" ]; then
+            PACKER_EXE=$(find . -name "rustdesk-portable-packer.exe" | head -n 1)
+          fi
+          echo "Found packed portable exe: $PACKER_EXE"
+          cp "$PACKER_EXE" ./output/UniverSee-Windows.exe
 
       - name: Upload Windows EXE Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Universee-Windows.exe
-          path: ./output/Universee-Windows.exe
+          path: ./output/UniverSee-Windows.exe
 
       - name: Release Windows EXE to GitHub
         uses: softprops/action-gh-release@v2
-        if: always()
+        if: success()
         with:
           tag_name: universee-v1.5.3
-          files: ./output/Universee-Windows.exe
+          files: ./output/UniverSee-Windows.exe
