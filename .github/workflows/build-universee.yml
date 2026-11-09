@@ -1,4 +1,4 @@
-name: Build UniverSee Android APK
+name: Build UniverSee Android & Windows
 
 on:
   workflow_dispatch:
@@ -230,6 +230,118 @@ jobs:
         if: always()
         with:
           tag_name: universee-v1.5.3
-          name: "UniverSee Android v1.5.3"
-          body: "Official 100% white-labeled UniverSee Android APK for Universal Move."
           files: ./${{ matrix.job.out_name }}
+
+  build_windows:
+    needs: [generate_bridge]
+    name: Build UniverSee Windows Client (x64)
+    runs-on: windows-2022
+    env:
+      LLVM_VERSION: "15.0.6"
+      FLUTTER_VERSION: "3.24.5"
+      RUST_VERSION: "1.75"
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@v4
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2.0.9
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install Flutter
+        id: flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          architecture: x64
+
+      - name: Replace engine with custom Flutter engine
+        shell: powershell
+        run: |
+          flutter doctor -v
+          flutter precache --windows
+          Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
+          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
+          Move-Item -Force -Path windows-x64-release/* -Destination C:\hostedtoolcache\windows\flutter\stable-${{ env.FLUTTER_VERSION }}-x64\bin\cache\artifacts\engine\windows-x64-release\
+
+      - name: Patch Flutter
+        shell: bash
+        run: |
+          cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff $(dirname $(dirname $(which flutter)))
+          cd $(dirname $(dirname $(which flutter)))
+          if [[ "3.24.5" == ${{ env.FLUTTER_VERSION }} ]]; then
+            git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
+          fi
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: x86_64-pc-windows-msvc
+          components: "rustfmt"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: windows-2022
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        shell: bash
+        run: |
+          $VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"
+
+      - name: Build WindowInjection DLL
+        shell: powershell
+        run: |
+          git clone https://github.com/rustdesk-org/RustDeskTempTopMostWindow RustDeskTempTopMostWindow
+          cd RustDeskTempTopMostWindow
+          git checkout ecd8d6a139eee76845ea66423fb739af450fda90
+          msbuild WindowInjection/WindowInjection.vcxproj -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10
+          cd ..
+
+      - name: Build UniverSee Windows Release
+        shell: powershell
+        run: |
+          python3 .\build.py --portable --flutter --skip-portable-pack --hwcodec --vram
+          Move-Item -Path ./flutter/build/windows/x64/runner/Release -Destination ./rustdesk
+          Copy-Item -Path ./RustDeskTempTopMostWindow/WindowInjection/x64/Release/WindowInjection.dll -Destination ./rustdesk/
+
+      - name: Package Self-Contained Portable EXE
+        shell: bash
+        run: |
+          sed -i '/dpiAware/d' res/manifest.xml
+          pushd ./libs/portable
+          pip3 install -r requirements.txt
+          python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
+          popd
+          mkdir -p ./output
+          mv ./target/release/rustdesk-portable-packer.exe ./output/Universee-Windows.exe
+
+      - name: Upload Windows EXE Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Universee-Windows.exe
+          path: ./output/Universee-Windows.exe
+
+      - name: Release Windows EXE to GitHub
+        uses: softprops/action-gh-release@v2
+        if: always()
+        with:
+          tag_name: universee-v1.5.3
+          files: ./output/Universee-Windows.exe
