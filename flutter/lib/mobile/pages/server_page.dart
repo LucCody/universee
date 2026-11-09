@@ -24,10 +24,7 @@ class ServerPage extends StatefulWidget implements PageShape {
   final icon = const Icon(Icons.mobile_screen_share);
 
   @override
-  final appBarActions = (!bind.isDisableSettings() &&
-          bind.mainGetBuildinOption(key: kOptionHideSecuritySetting) != 'Y')
-      ? [_DropDownAction()]
-      : [];
+  final appBarActions = <Widget>[];
 
   ServerPage({Key? key}) : super(key: key);
 
@@ -210,10 +207,9 @@ class _ServerPageState extends State<ServerPage> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.start,
                       children: [
-                        buildPresetPasswordWarningMobile(),
-                        gFFI.serverModel.isStart
-                            ? ServerInfo()
-                            : ServiceNotRunningNotification(),
+                        ServerInfo(),
+                        if (!gFFI.serverModel.isStart)
+                          ServiceNotRunningNotification(),
                         const ConnectionManager(),
                         const PermissionChecker(),
                         SizedBox.fromSize(size: const Size(0, 15.0)),
@@ -246,18 +242,22 @@ class ServiceNotRunningNotification extends StatelessWidget {
                     style:
                         const TextStyle(fontSize: 12, color: MyTheme.darkGray))
                 .marginOnly(bottom: 8),
-            ElevatedButton.icon(
-                icon: const Icon(Icons.play_arrow),
-                onPressed: () {
-                  if (gFFI.userModel.userName.value.isEmpty &&
-                      bind.mainGetLocalOption(key: "show-scam-warning") !=
-                          "N") {
-                    showScamWarning(context, serverModel);
-                  } else {
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: MyTheme.accent,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  icon: const Icon(Icons.play_arrow_rounded, size: 24),
+                  onPressed: () {
                     serverModel.toggleService();
-                  }
-                },
-                label: Text(translate("Start service")))
+                  },
+                  label: Text(translate("Start service"),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+            )
           ],
         ));
   }

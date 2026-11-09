@@ -309,6 +309,9 @@ jobs:
         shell: bash
         run: |
           $VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"
+          if [ -d "$VCPKG_ROOT/installed/x64-windows/include" ]; then
+            cp -r $VCPKG_ROOT/installed/x64-windows/include/* $VCPKG_ROOT/installed/x64-windows-static/include/ 2>/dev/null || true
+          fi
 
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@v2
