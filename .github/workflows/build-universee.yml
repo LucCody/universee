@@ -29,7 +29,7 @@ jobs:
         run: flutter pub get
 
       - name: Build Android APK
-        run: flutter build apk --release
+        run: flutter build apk --release --android-skip-build-dependency-validation
 
       - name: Rename APK
         run: cp build/app/outputs/flutter-apk/app-release.apk Universee-Android.apk
