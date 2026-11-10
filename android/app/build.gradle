@@ -24,7 +24,7 @@ if (flutterVersionName == null) {
 
 android {
     namespace "tech.universalmove.universee"
-    compileSdk 34
+    compileSdk 36
     ndkVersion flutter.ndkVersion
 
     compileOptions {
