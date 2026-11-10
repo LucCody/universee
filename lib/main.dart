@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:fluttertoast/fluttertoast.dart';
-import 'services/universee_service.dart';
+import "package:flutter/material.dart";
+import "package:flutter/services.dart";
+import "package:fluttertoast/fluttertoast.dart";
+import "services/universee_service.dart";
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,7 +14,7 @@ class UniverSeeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'UniverSee Assistance',
+      title: "UniverSee Assistance",
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
@@ -41,10 +41,10 @@ class QuickSupportPage extends StatefulWidget {
 
 class _QuickSupportPageState extends State<QuickSupportPage> {
   final UniverSeeService _service = UniverSeeService();
-  String _id = '--- --- ---';
-  String _pin = '----';
+  String _id = "--- --- ---";
+  String _pin = "----";
   ConnectionStateEnum _state = ConnectionStateEnum.disconnected;
-  String _statusLog = '';
+  String _statusLog = "";
 
   @override
   void initState() {
@@ -64,7 +64,7 @@ class _QuickSupportPageState extends State<QuickSupportPage> {
   void _copyId() {
     Clipboard.setData(ClipboardData(text: _id));
     Fluttertoast.showToast(
-      msg: 'Identifiant copié !',
+      msg: "Identifiant copié !",
       backgroundColor: const Color(0xFF10B981),
       textColor: Colors.white,
     );
@@ -73,7 +73,7 @@ class _QuickSupportPageState extends State<QuickSupportPage> {
   void _copyPin() {
     Clipboard.setData(ClipboardData(text: _pin));
     Fluttertoast.showToast(
-      msg: 'Code PIN copié !',
+      msg: "Code PIN copié !",
       backgroundColor: const Color(0xFF10B981),
       textColor: Colors.white,
     );
@@ -110,7 +110,7 @@ class _QuickSupportPageState extends State<QuickSupportPage> {
                     decoration: BoxDecoration(
                       color: const Color(0xFFF97316).withOpacity(0.15),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.write != null ? null : Border.all(color: const Color(0xFFF97316).withOpacity(0.4)),
+                      border: Border.all(color: const Color(0xFFF97316).withOpacity(0.4)),
                     ),
                     child: const Icon(Icons.screen_share, color: Color(0xFFF97316), size: 26),
                   ),
@@ -119,7 +119,7 @@ class _QuickSupportPageState extends State<QuickSupportPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: const [
                       Text(
-                        'UniverSee',
+                        "UniverSee",
                         style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
@@ -128,7 +128,7 @@ class _QuickSupportPageState extends State<QuickSupportPage> {
                         ),
                       ),
                       Text(
-                        'Universal Move Assistance',
+                        "Universal Move Assistance",
                         style: TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                     ],
@@ -168,8 +168,8 @@ class _QuickSupportPageState extends State<QuickSupportPage> {
                     const SizedBox(width: 8),
                     Text(
                       isInSession
-                          ? 'Session active avec le technicien'
-                          : (isReady ? 'Prêt pour la connexion' : 'Connexion au serveur...'),
+                          ? "Session active avec le technicien"
+                          : (isReady ? "Prêt pour la connexion" : "Connexion au serveur..."),
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -200,9 +200,8 @@ class _QuickSupportPageState extends State<QuickSupportPage> {
                 ),
                 child: Column(
                   children: [
-                    // Support ID
                     const Text(
-                      'VOTRE IDENTIFIANT D\'ASSISTANCE',
+                      "VOTRE IDENTIFIANT D'ASSISTANCE",
                       style: TextStyle(
                         fontSize: 11,
                         letterSpacing: 1.2,
@@ -225,7 +224,7 @@ class _QuickSupportPageState extends State<QuickSupportPage> {
                                 fontSize: 32,
                                 fontWeight: FontWeight.bold,
                                 letterSpacing: 2.0,
-                                fontFamily: 'monospace',
+                                fontFamily: "monospace",
                                 color: Colors.white,
                               ),
                             ),
@@ -238,9 +237,8 @@ class _QuickSupportPageState extends State<QuickSupportPage> {
 
                     const Divider(color: Color(0xFF30363D), height: 32),
 
-                    // Security PIN
                     const Text(
-                      'CODE PIN TEMPORAIRE',
+                      "CODE PIN TEMPORAIRE",
                       style: TextStyle(
                         fontSize: 11,
                         letterSpacing: 1.2,
@@ -268,7 +266,7 @@ class _QuickSupportPageState extends State<QuickSupportPage> {
                                 fontSize: 24,
                                 fontWeight: FontWeight.bold,
                                 letterSpacing: 5.0,
-                                fontFamily: 'monospace',
+                                fontFamily: "monospace",
                                 color: Color(0xFFF97316),
                               ),
                             ),
@@ -278,7 +276,7 @@ class _QuickSupportPageState extends State<QuickSupportPage> {
                         IconButton(
                           icon: const Icon(Icons.refresh, color: Colors.grey, size: 22),
                           onPressed: () => _service.regeneratePin(),
-                          tooltip: 'Générer un nouveau PIN',
+                          tooltip: "Générer un nouveau PIN",
                         ),
                       ],
                     ),
@@ -288,7 +286,6 @@ class _QuickSupportPageState extends State<QuickSupportPage> {
 
               const SizedBox(height: 20),
 
-              // Status log or message
               if (_statusLog.isNotEmpty)
                 Text(
                   _statusLog,
@@ -298,7 +295,6 @@ class _QuickSupportPageState extends State<QuickSupportPage> {
 
               const Spacer(),
 
-              // Big Action Button
               SizedBox(
                 width: double.infinity,
                 height: 54,
@@ -310,7 +306,7 @@ class _QuickSupportPageState extends State<QuickSupportPage> {
                     size: 24,
                   ),
                   label: Text(
-                    isInSession ? 'Arrêter le partage' : 'Démarrer le partage d\'écran',
+                    isInSession ? "Arrêter le partage" : "Démarrer le partage d'écran",
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -329,14 +325,13 @@ class _QuickSupportPageState extends State<QuickSupportPage> {
 
               const SizedBox(height: 20),
 
-              // Bottom Security Footer
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: const [
                   Icon(Icons.lock_outline, size: 14, color: Color(0xFF10B981)),
                   SizedBox(width: 6),
                   Text(
-                    'Chiffrement direct P2P • Universal Move Tech',
+                    "Chiffrement direct P2P • Universal Move Tech",
                     style: TextStyle(fontSize: 11, color: Colors.grey),
                   ),
                 ],
