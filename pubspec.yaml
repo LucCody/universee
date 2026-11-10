@@ -1,0 +1,23 @@
+name: universee
+description: 'UniverSee QuickSupport - Dedicated Remote Assistance for Universal Move'
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_webrtc: ^0.12.5
+  web_socket_channel: ^3.0.1
+  shared_preferences: ^2.2.3
+  fluttertoast: ^8.2.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true

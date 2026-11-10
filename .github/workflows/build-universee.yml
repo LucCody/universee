@@ -1,380 +1,122 @@
-name: Build UniverSee Android & Windows
+name: Build Dedicated UniverSee Apps
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - master
-
-permissions:
-  contents: write
-
-env:
-  VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+    branches: [ master ]
+  workflow_dispatch:
 
 jobs:
-  generate_bridge:
-    name: Generate Bridge Files
-    runs-on: ubuntu-22.04
+  build-android:
+    name: Build UniverSee Android APK
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout source code
+      - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Set up Java JDK
+        uses: actions/setup-java@v4
         with:
-          submodules: recursive
+          distribution: 'temurin'
+          java-version: '17'
 
-      - name: Install prerequisites
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y \
-            clang \
-            cmake \
-            curl \
-            gcc \
-            git \
-            g++ \
-            libclang-dev \
-            libgtk-3-dev \
-            llvm-dev \
-            nasm \
-            ninja-build \
-            pkg-config \
-            wget
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@v1
-        with:
-          toolchain: "1.75"
-          components: "rustfmt"
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: bridge-cache
-
-      - name: Install Flutter
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: "stable"
-          flutter-version: "3.22.3"
+          channel: 'stable'
           cache: true
 
-      - name: Install flutter rust bridge deps
-        shell: bash
-        run: |
-          cargo install cargo-expand --version 1.0.95 --locked
-          cargo install flutter_rust_bridge_codegen --version 1.80.1 --features "uuid" --locked
-          sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' flutter/pubspec.yaml
-          pushd flutter && flutter pub get && popd
+      - name: Install Dependencies
+        run: flutter pub get
 
-      - name: Run flutter rust bridge
-        run: |
-          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
-          cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h
+      - name: Build Android APK
+        run: flutter build apk --release
 
-      - name: Upload Bridge Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: bridge-artifact
-          path: |
-            ./src/bridge_generated.rs
-            ./src/bridge_generated.io.rs
-            ./flutter/lib/generated_bridge.dart
-            ./flutter/lib/generated_bridge.freezed.dart
-            ./flutter/macos/Runner/bridge_generated.h
-            ./flutter/ios/Runner/bridge_generated.h
-
-  build_android:
-    needs: [generate_bridge]
-    name: Build UniverSee APK (${{ matrix.job.arch }})
-    runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - {
-              arch: arm64-v8a,
-              target: aarch64-linux-android,
-              flutter_target: android-arm64,
-              ndk_script: ./flutter/ndk_arm64.sh,
-              ndk_lib_dir: aarch64-linux-android,
-              out_name: Universee-Android-arm64.apk,
-              apk_name: app-arm64-v8a-release.apk
-            }
-          - {
-              arch: armeabi-v7a,
-              target: armv7-linux-androideabi,
-              flutter_target: android-arm,
-              ndk_script: ./flutter/ndk_arm.sh,
-              ndk_lib_dir: arm-linux-androideabi,
-              out_name: Universee-Android-armv7.apk,
-              apk_name: app-armeabi-v7a-release.apk
-            }
-    steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-               clang \
-               cmake \
-               curl \
-               gcc-multilib \
-               git \
-               g++ \
-               g++-multilib \
-               libayatana-appindicator3-dev \
-               libasound2-dev \
-               libc6-dev \
-               libclang-dev \
-               libunwind-dev \
-               libgstreamer1.0-dev \
-               libgstreamer-plugins-base1.0-dev \
-               libgtk-3-dev \
-               libpulse-dev \
-               libva-dev \
-               libxcb-randr0-dev \
-               libxcb-shape0-dev \
-               libxcb-xfixes0-dev \
-               libxdo-dev \
-               libxfixes-dev \
-               llvm-dev \
-               nasm \
-               ninja-build \
-               openjdk-17-jdk-headless \
-               pkg-config \
-               tree \
-               wget
-
-      - name: Install Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: "stable"
-          flutter-version: "3.24.5"
-
-      - name: Patch Flutter
-        run: |
-          cd $(dirname $(dirname $(which flutter)))
-          git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
-
-      - name: Setup NDK
-        uses: nttld/setup-ndk@v1
-        id: setup-ndk
-        with:
-          ndk-version: "r28c"
-          add-to-path: true
-
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgDirectory: /opt/artifacts/vcpkg
-          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
-          doNotCache: false
-
-      - name: Install vcpkg dependencies
-        env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
-          VCPKG_ROOT: /opt/artifacts/vcpkg
-        shell: bash
-        run: |
-          ./flutter/build_android_deps.sh "${{ matrix.job.arch }}"
-
-      - name: Restore bridge files
-        uses: actions/download-artifact@v4
-        with:
-          name: bridge-artifact
-          path: ./
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@v1
-        with:
-          toolchain: "1.75"
-          components: "rustfmt"
-
-      - name: Build UniverSee Native Library
-        env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
-        run: |
-          rustup target add ${{ matrix.job.target }}
-          cargo install cargo-ndk --version 3.1.2 --locked
-          ${{ matrix.job.ndk_script }}
-          mkdir -p ./flutter/android/app/src/main/jniLibs/${{ matrix.job.arch }}
-          cp ./target/${{ matrix.job.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/${{ matrix.job.arch }}/librustdesk.so
-          cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/${{ matrix.job.ndk_lib_dir }}/libc++_shared.so ./flutter/android/app/src/main/jniLibs/${{ matrix.job.arch }}/
-
-      - name: Build UniverSee Flutter APK
-        shell: bash
-        env:
-          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
-        run: |
-          export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
-          sed -i "s/org.gradle.jvmargs=-Xmx1024M/org.gradle.jvmargs=-Xmx2g/g" ./flutter/android/gradle.properties
-          sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
-          pushd flutter
-          flutter build apk --release --target-platform ${{ matrix.job.flutter_target }} --split-per-abi
-          popd
-          mv flutter/build/app/outputs/flutter-apk/${{ matrix.job.apk_name }} ./${{ matrix.job.out_name }}
+      - name: Rename APK
+        run: cp build/app/outputs/flutter-apk/app-release.apk Universee-Android.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.job.out_name }}
-          path: ./${{ matrix.job.out_name }}
+          name: Universee-Android
+          path: Universee-Android.apk
 
-      - name: Release to GitHub
-        uses: softprops/action-gh-release@v2
-        if: always()
+      - name: Deploy APK to Universal Move VPS
+        uses: appleboy/scp-action@master
+        continue-on-error: true
         with:
-          tag_name: universee-v1.5.3
-          files: ./${{ matrix.job.out_name }}
+          host: 212.108.107.196
+          port: 22543
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "Universee-Android.apk"
+          target: "/www/wwwroot/universalmove.tech/public/download/"
 
-  build_windows:
-    needs: [generate_bridge]
-    name: Build UniverSee Windows Client (x64)
-    runs-on: windows-2022
-    env:
-      LLVM_VERSION: "15.0.6"
-      FLUTTER_VERSION: "3.24.5"
-      RUST_VERSION: "1.75"
+  build-windows:
+    name: Build UniverSee Windows App
+    runs-on: windows-latest
     steps:
-      - name: Checkout source code
+      - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
-      - name: Restore bridge files
-        uses: actions/download-artifact@v4
-        with:
-          name: bridge-artifact
-          path: ./
-
-      - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v2.0.9
-        with:
-          version: ${{ env.LLVM_VERSION }}
-
-      - name: Install Flutter
-        id: flutter
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: "stable"
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          architecture: x64
+          channel: 'stable'
+          cache: true
 
-      - name: Replace engine with custom Flutter engine
-        shell: powershell
+      - name: Enable Windows Desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build Windows Release
+        run: flutter build windows --release
+
+      - name: Compress Windows Build
+        shell: pwsh
         run: |
-          flutter doctor -v
-          flutter precache --windows
-          Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
-          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release -Force
-          $flutterCmd = (Get-Command flutter).Source
-          $flutterBin = Split-Path -Parent $flutterCmd
-          $engineDir = Join-Path $flutterBin "cache\artifacts\engine\windows-x64-release"
-          if (!(Test-Path $engineDir)) {
-              New-Item -ItemType Directory -Force -Path $engineDir
-          }
-          Copy-Item -Force -Recurse -Path "windows-x64-release\*" -Destination $engineDir
+          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath Universee-Windows.zip -Force
 
-      - name: Patch Flutter
-        shell: bash
-        run: |
-          cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff $(dirname $(dirname $(which flutter)))
-          cd $(dirname $(dirname $(which flutter)))
-          if [[ "3.24.5" == ${{ env.FLUTTER_VERSION }} ]]; then
-            git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
-          fi
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@v1
-        with:
-          toolchain: ${{ env.RUST_VERSION }}
-          targets: x86_64-pc-windows-msvc
-          components: "rustfmt"
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: windows-2022
-
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgDirectory: C:\vcpkg
-          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
-          doNotCache: false
-
-      - name: Install vcpkg dependencies
-        shell: bash
-        run: |
-          $VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"
-          if [ -d "$VCPKG_ROOT/installed/x64-windows/include" ]; then
-            cp -r $VCPKG_ROOT/installed/x64-windows/include/* $VCPKG_ROOT/installed/x64-windows-static/include/ 2>/dev/null || true
-          fi
-
-      - name: Add MSBuild to PATH
-        uses: microsoft/setup-msbuild@v2
-
-      - name: Build WindowInjection DLL
-        shell: powershell
-        run: |
-          git clone https://github.com/rustdesk-org/RustDeskTempTopMostWindow RustDeskTempTopMostWindow
-          cd RustDeskTempTopMostWindow
-          git checkout ecd8d6a139eee76845ea66423fb739af450fda90
-          msbuild WindowInjection/WindowInjection.vcxproj -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10
-          cd ..
-
-      - name: Build UniverSee Windows Release
-        shell: powershell
-        run: |
-          python3 .\build.py --portable --flutter --skip-portable-pack --hwcodec --vram
-          Move-Item -Path ./flutter/build/windows/x64/runner/Release -Destination ./rustdesk
-          Copy-Item -Path ./RustDeskTempTopMostWindow/WindowInjection/x64/Release/WindowInjection.dll -Destination ./rustdesk/
-          
-          # Virtual display driver for headless remote control
-          Invoke-WebRequest -Uri https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
-          Expand-Archive usbmmidd_v2.zip -DestinationPath . -Force
-          Remove-Item -Path usbmmidd_v2\Win32 -Recurse -ErrorAction SilentlyContinue
-          Remove-Item -Path "usbmmidd_v2\deviceinstaller64.exe", "usbmmidd_v2\deviceinstaller.exe", "usbmmidd_v2\usbmmidd.bat" -ErrorAction SilentlyContinue
-          Move-Item -Force .\usbmmidd_v2 ./rustdesk/
-
-      - name: Copy Runner.res for metadata
-        shell: bash
-        run: |
-          runner_res=$(find . -name "Runner.res" | head -n 1)
-          if [ -n "$runner_res" ]; then
-            echo "Found Runner.res at $runner_res"
-            cp "$runner_res" ./libs/portable/Runner.res
-          fi
-
-      - name: Package Self-Contained Portable EXE
-        shell: bash
-        run: |
-          sed -i '/dpiAware/d' res/manifest.xml
-          pushd ./libs/portable
-          pip3 install -r requirements.txt
-          python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
-          popd
-          mkdir -p ./output
-          PACKER_EXE=$(find target -name "rustdesk-portable-packer.exe" | head -n 1)
-          if [ -z "$PACKER_EXE" ]; then
-            PACKER_EXE=$(find . -name "rustdesk-portable-packer.exe" | head -n 1)
-          fi
-          echo "Found packed portable exe: $PACKER_EXE"
-          cp "$PACKER_EXE" ./output/UniverSee-Windows.exe
-
-      - name: Upload Windows EXE Artifact
+      - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Universee-Windows.exe
-          path: ./output/UniverSee-Windows.exe
+          name: Universee-Windows
+          path: Universee-Windows.zip
 
-      - name: Release Windows EXE to GitHub
-        uses: softprops/action-gh-release@v2
-        if: success()
+  create-release:
+    name: Create UniverSee Release
+    needs: [build-android, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Android Artifact
+        uses: actions/download-artifact@v4
         with:
-          tag_name: universee-v1.5.3
-          files: ./output/UniverSee-Windows.exe
+          name: Universee-Android
+          path: release-assets
+        continue-on-error: true
+
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Universee-Windows
+          path: release-assets
+        continue-on-error: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/master'
+        with:
+          tag_name: v2.0.0-dedicated
+          name: "UniverSee QuickSupport v2.0.0 (Dedicated WebRTC)"
+          body: |
+            ## UniverSee QuickSupport v2.0.0
+            100% Dedicated White-Label Remote Support for Universal Move.
+            - Direct P2P WebRTC streaming
+            - Integrated directly with Univers'All Collab
+            - Zero third-party dependencies
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
